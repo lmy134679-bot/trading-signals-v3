@@ -193,9 +193,43 @@ app.get('/api/signals', (req, res) => {
   try {
     if (fs.existsSync(SIGNALS_FILE)) {
       const data = JSON.parse(fs.readFileSync(SIGNALS_FILE, 'utf8'));
-      res.json({ success: true, ...data });
+
+      // 添加完整的 data_health 信息
+      const scanTime = data.scan_time ? new Date(data.scan_time).getTime() : Date.now();
+      const dataHealth = {
+        status: 'HEALTHY',
+        last_update: scanTime,
+        age_ms: Date.now() - scanTime,
+        thresholds: {
+          healthy_ms: 300000,    // 5分钟
+          stale_ms: 900000,      // 15分钟
+          expired_ms: 3600000    // 1小时
+        },
+        kline_count: data.signals ? data.signals.length : 0,
+        ticker_count: data.signals ? data.signals.length : 0
+      };
+
+      res.json({ 
+        success: true, 
+        ...data,
+        data_health: dataHealth
+      });
     } else {
-      res.json({ success: true, signals: [], total_signals: 0 });
+      res.json({ 
+        success: true, 
+        signals: [], 
+        total_signals: 0,
+        data_health: {
+          status: 'DEGRADED',
+          last_update: Date.now(),
+          age_ms: 0,
+          thresholds: {
+            healthy_ms: 300000,
+            stale_ms: 900000,
+            expired_ms: 3600000
+          }
+        }
+      });
     }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
