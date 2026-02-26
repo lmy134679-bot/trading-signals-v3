@@ -525,21 +525,28 @@ function generateSignal(symbol, klines, ticker) {
   // 计算实际RRR
   const rrr = risk > 0 ? (tp1 - entryPrice) / risk : 2;
 
-  // 确定评级
+  // 确定评级和信号类型
   let rating = 'C';
   let signalType = 'CANDIDATE';
-
-  if (confidence >= 85 && entryInfo.type !== 'CURRENT_PRICE') {
+  
+  // 核心逻辑：只有价格接近技术位时才是可交易信号
+  const isTradable = entryInfo.tradable === true;
+  
+  if (confidence >= 85 && isTradable) {
     rating = 'S';
     signalType = 'TRADABLE';
-  } else if (confidence >= 70 && entryInfo.type !== 'CURRENT_PRICE') {
+  } else if (confidence >= 70 && isTradable) {
     rating = 'A';
     signalType = 'TRADABLE';
-  } else if (confidence >= 55) {
+  } else if (confidence >= 55 && isTradable) {
     rating = 'B';
-    signalType = entryInfo.type !== 'CURRENT_PRICE' ? 'TRADABLE' : 'CANDIDATE';
+    signalType = 'TRADABLE';
+  } else if (confidence >= 55) {
+    // 价格远离技术位，降级为候选/等待信号
+    rating = 'C';
+    signalType = 'CANDIDATE';
   }
-
+  
   // 如果入场价就是当前价且没有技术位支撑，降级为候选
   if (entryInfo.type === 'CURRENT_PRICE') {
     signalType = 'CANDIDATE';
