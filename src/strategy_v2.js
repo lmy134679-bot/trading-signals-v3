@@ -254,6 +254,7 @@ function detectBOS(klines, swingPoints) {
  */
 function calculateSMCEntryPrice(direction, klines, fvgList, obList, swingPoints, currentPrice) {
   const atr = calculateATR(klines);
+  const MAX_ENTRY_DISTANCE = 0.015; // 最大入场距离1.5%
 
   // 1. 寻找匹配的FVG
   const relevantFVGs = fvgList.filter(fvg => 
@@ -268,23 +269,39 @@ function calculateSMCEntryPrice(direction, klines, fvgList, obList, swingPoints,
     // LONG: 在FVG中轴线或下沿附近入场
     // SHORT: 在FVG中轴线或上沿附近入场
     if (direction === 'LONG') {
-      // 理想入场: FVG下沿 + (FVG高度 * 0.3)
       const fvgHeight = lastFVG.top - lastFVG.bottom;
       const entryPrice = lastFVG.bottom + fvgHeight * CONFIG.FVG_ENTRY_RATIO;
+      
+      // 检查价格是否在FVG范围内或接近
+      const inFVG = currentPrice >= lastFVG.bottom && currentPrice <= lastFVG.top;
+      const distance = Math.abs(currentPrice - entryPrice) / currentPrice;
+      const nearFVG = distance < MAX_ENTRY_DISTANCE;
+      
       return {
         price: entryPrice,
         type: 'FVG_MID',
-        description: `FVG中轴线入场 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})`,
-        fvg: lastFVG
+        description: inFVG ? `FVG范围内入场 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})` : `FVG中轴线目标 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})`,
+        fvg: lastFVG,
+        tradable: inFVG || nearFVG,
+        inFVG,
+        distance
       };
     } else {
       const fvgHeight = lastFVG.top - lastFVG.bottom;
       const entryPrice = lastFVG.top - fvgHeight * CONFIG.FVG_ENTRY_RATIO;
+      
+      const inFVG = currentPrice >= lastFVG.bottom && currentPrice <= lastFVG.top;
+      const distance = Math.abs(currentPrice - entryPrice) / currentPrice;
+      const nearFVG = distance < MAX_ENTRY_DISTANCE;
+      
       return {
         price: entryPrice,
         type: 'FVG_MID',
-        description: `FVG中轴线入场 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})`,
-        fvg: lastFVG
+        description: inFVG ? `FVG范围内入场 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})` : `FVG中轴线目标 (${lastFVG.bottom.toFixed(4)} - ${lastFVG.top.toFixed(4)})`,
+        fvg: lastFVG,
+        tradable: inFVG || nearFVG,
+        inFVG,
+        distance
       };
     }
   }
