@@ -19,7 +19,7 @@ const http = require('http');
 const WebSocket = require('ws');
 
 // 数据获取
-const { getAllKlines, getTickers, SYMBOLS_54 } = require('./src/gateio');
+const { getAllKlines, getTickers, SYMBOLS_54, getCacheStats, clearCache } = require('./src/gateio');
 
 // 策略模块
 const { scanAllSymbolsV2, CONFIG: CONFIG_V2 } = require('./src/strategy_v2');
@@ -288,6 +288,35 @@ app.get('/api/stats', (req, res) => {
 });
 
 // 调试端点
+
+// 获取缓存统计
+app.get('/api/cache/stats', (req, res) => {
+  try {
+    const stats = getCacheStats ? getCacheStats() : { error: 'getCacheStats not available' };
+    res.json({
+      success: true,
+      stats,
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 清除缓存
+app.post('/api/cache/clear', (req, res) => {
+  try {
+    if (clearCache) clearCache();
+    res.json({
+      success: true,
+      message: 'Cache cleared',
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/debug/status', (req, res) => {
   res.json({
     success: true,
