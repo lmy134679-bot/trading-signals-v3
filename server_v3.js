@@ -30,7 +30,8 @@ const {
   processPriceUpdate, 
   getWinRateStats, 
   getActiveSignals, 
-  getHistory 
+  getHistory,
+  closeSignal 
 } = require('./src/signalLifecycle');
 
 // ==================== 初始化 ====================
