@@ -24,6 +24,15 @@ const { getAllKlines, getTickers, SYMBOLS_54, getCacheStats, clearCache } = requ
 // 策略模块
 const { scanAllSymbolsV2, CONFIG: CONFIG_V2 } = require('./src/strategy_v2');
 
+// 信号生命周期管理
+const { 
+  addSignal, 
+  processPriceUpdate, 
+  getWinRateStats, 
+  getActiveSignals, 
+  getHistory 
+} = require('./src/signalLifecycle');
+
 // ==================== 初始化 ====================
 
 const app = express();
@@ -147,6 +156,17 @@ async function performScan(userId = 'system') {
     
     // 保存结果
     fs.writeFileSync(SIGNALS_FILE, JSON.stringify(scanResult, null, 2));
+    
+    // 添加信号到活跃列表（用于生命周期跟踪）
+    if (scanResult.signals && scanResult.signals.length > 0) {
+      for (const signal of scanResult.signals) {
+        // 只添加可交易信号
+        if (signal.signal_type === 'TRADABLE') {
+          addSignal(signal);
+        }
+      }
+      console.log(`[Scan] Added ${scanResult.signals.filter(s => s.signal_type === 'TRADABLE').length} signals to active list`);
+    }
     
     scanStatus = {
       status: 'IDLE',
@@ -288,6 +308,48 @@ app.get('/api/stats', (req, res) => {
 });
 
 // 调试端点
+
+// 获取胜率统计
+app.get('/api/winrate', (req, res) => {
+  try {
+    const period = req.query.period || 'all';
+    const stats = getWinRateStats(period);
+    res.json({
+      success: true,
+      ...stats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 获取活跃信号
+app.get('/api/signals/active', (req, res) => {
+  try {
+    const activeSignals = getActiveSignals();
+    res.json({
+      success: true,
+      count: Object.keys(activeSignals).length,
+      signals: activeSignals
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 获取历史记录
+app.get('/api/signals/history', (req, res) => {
+  try {
+    const history = getHistory();
+    res.json({
+      success: true,
+      total: history.records.length,
+      records: history.records.slice(-50).reverse() // 最近50条
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // 获取缓存统计
 app.get('/api/cache/stats', (req, res) => {
