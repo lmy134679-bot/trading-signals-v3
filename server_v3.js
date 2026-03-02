@@ -785,25 +785,35 @@ function generateMockSignals() {
     // 根据方向计算入场价、止损和止盈
     let entryPrice, sl, tp1, tp2, rrr;
 
+    // 生成合理的RRR值 (2-4之间)
+    const targetRrr = 2 + Math.random() * 2;
+
     if (direction === 'LONG') {
       // 做多：入场价在当前价附近，止损在下方，止盈在上方
       entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
-      sl = entryPrice * (0.97 + Math.random() * 0.02);  // 止损在入场价下方1-3%
-      tp1 = entryPrice * (1.02 + Math.random() * 0.02); // TP1在入场价上方2-4%
-      tp2 = entryPrice * (1.04 + Math.random() * 0.04); // TP2在入场价上方4-8%
+      // 止损距离：1-2%的入场价
+      const stopDistance = entryPrice * (0.01 + Math.random() * 0.01);
+      sl = entryPrice - stopDistance;
+      // 止盈距离 = 止损距离 * 目标RRR
+      const tpDistance = stopDistance * targetRrr;
+      tp1 = entryPrice + tpDistance;
+      tp2 = entryPrice + tpDistance * 1.5;
     } else {
       // 做空：入场价在当前价附近，止损在上方，止盈在下方
       entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
-      sl = entryPrice * (1.01 + Math.random() * 0.02);  // 止损在入场价上方1-3%
-      tp1 = entryPrice * (0.98 - Math.random() * 0.02); // TP1在入场价下方2-4%
-      tp2 = entryPrice * (0.96 - Math.random() * 0.04); // TP2在入场价下方4-8%
+      // 止损距离：1-2%的入场价
+      const stopDistance = entryPrice * (0.01 + Math.random() * 0.01);
+      sl = entryPrice + stopDistance;
+      // 止盈距离 = 止损距离 * 目标RRR
+      const tpDistance = stopDistance * targetRrr;
+      tp1 = entryPrice - tpDistance;
+      tp2 = entryPrice - tpDistance * 1.5;
     }
 
-    // 正确计算RRR (Risk Reward Ratio)
+    // 计算实际RRR
     const risk = Math.abs(entryPrice - sl);
     const reward1 = Math.abs(tp1 - entryPrice);
-    const reward2 = Math.abs(tp2 - entryPrice);
-    rrr = risk > 0 ? parseFloat((reward1 / risk).toFixed(2)) : 1;
+    rrr = risk > 0 ? parseFloat((reward1 / risk).toFixed(2)) : 2;
 
     // 根据RRR调整评级
     let adjustedRating = rating;
