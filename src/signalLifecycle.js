@@ -270,7 +270,8 @@ function getWinRateStats(period = 'all') {
 }
 
 function getActiveSignals() {
-  return loadActiveSignals();
+  const signals = loadActiveSignals();
+  return Object.values(signals || {});
 }
 
 function getHistory() {
