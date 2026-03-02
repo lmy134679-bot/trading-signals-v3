@@ -14,11 +14,14 @@ const { initWebSocketServer, broadcastSignalUpdate } = require('./src/websocketS
 const { initDataSync, getDataStatus } = require('./src/dataSync');
 const { 
   getActiveSignals, 
-  getSignalHistory, 
-  getSignalById, 
+  getHistory, 
+  getWinRateStats,
   closeSignal,
-  getSignalStats,
-  updateSignalPrices 
+  updateSignalPrices,
+  addSignal,
+  markEntered,
+  SIGNAL_STATUS,
+  RESULT_TYPE
 } = require('./src/signalLifecycle');
 const { getRiskAssessment } = require('./src/riskManager');
 
@@ -75,6 +78,12 @@ app.get('/api/signals', (req, res) => {
     if (scanResults.signals && scanResults.signals.length > 0) {
       const existingIds = new Set(signals.map(s => s.id));
       const newSignals = scanResults.signals.filter(s => !existingIds.has(s.id));
+
+      // 将新信号添加到生命周期管理
+      for (const signal of newSignals) {
+        addSignal(signal);
+      }
+
       signals = [...signals, ...newSignals];
     }
 
@@ -137,7 +146,9 @@ app.get('/api/signals', (req, res) => {
  */
 app.get('/api/signals/:id', (req, res) => {
   try {
-    const signal = getSignalById(req.params.id);
+    const signals = getActiveSignals();
+    const signal = signals.find(s => s.id === req.params.id);
+
     if (!signal) {
       return res.status(404).json({ error: 'Signal not found' });
     }
@@ -156,15 +167,169 @@ app.get('/api/signals/:id', (req, res) => {
 });
 
 /**
- * 获取信号统计
+ * 获取信号统计（包含历史成功率）
  */
 app.get('/api/stats', (req, res) => {
   try {
-    const stats = getSignalStats();
-    res.json(stats);
+    const { period = 'all' } = req.query;
+
+    // 获取胜率统计
+    const winRateStats = getWinRateStats(period);
+
+    // 获取活跃信号统计
+    const activeSignals = getActiveSignals();
+    const activeByDirection = {
+      LONG: activeSignals.filter(s => s.direction === 'LONG').length,
+      SHORT: activeSignals.filter(s => s.direction === 'SHORT').length
+    };
+
+    const activeByType = {
+      TRADABLE: activeSignals.filter(s => s.signal_type === 'TRADABLE').length,
+      CANDIDATE: activeSignals.filter(s => s.signal_type === 'CANDIDATE').length
+    };
+
+    const activeByRating = {
+      S: activeSignals.filter(s => s.rating === 'S').length,
+      A: activeSignals.filter(s => s.rating === 'A').length,
+      B: activeSignals.filter(s => s.rating === 'B').length,
+      C: activeSignals.filter(s => s.rating === 'C').length
+    };
+
+    // 获取历史记录
+    const history = getHistory();
+
+    // 计算额外的统计
+    const totalSignals = activeSignals.length + (history.records ? history.records.length : 0);
+    const closedSignals = history.records ? history.records.length : 0;
+
+    // 按币种统计
+    const bySymbol = {};
+    for (const signal of activeSignals) {
+      const symbol = signal.symbol || 'UNKNOWN';
+      if (!bySymbol[symbol]) {
+        bySymbol[symbol] = { count: 0, LONG: 0, SHORT: 0 };
+      }
+      bySymbol[symbol].count++;
+      bySymbol[symbol][signal.direction]++;
+    }
+
+    // 添加历史记录中的币种统计
+    if (history.records) {
+      for (const record of history.records) {
+        const symbol = record.symbol || 'UNKNOWN';
+        if (!bySymbol[symbol]) {
+          bySymbol[symbol] = { count: 0, LONG: 0, SHORT: 0, win: 0, loss: 0 };
+        }
+        bySymbol[symbol].count++;
+        bySymbol[symbol][record.direction]++;
+        if (record.result === RESULT_TYPE.WIN) bySymbol[symbol].win++;
+        if (record.result === RESULT_TYPE.LOSS) bySymbol[symbol].loss++;
+      }
+    }
+
+    // 计算今日/本周/本月统计
+    const now = Date.now();
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const weekStart = now - 7 * 24 * 60 * 60 * 1000;
+    const monthStart = now - 30 * 24 * 60 * 60 * 1000;
+
+    const todayStats = getWinRateStats('24h');
+    const weekStats = getWinRateStats('7d');
+    const monthStats = getWinRateStats('30d');
+
+    res.json({
+      success: true,
+      period,
+      summary: {
+        total_signals: totalSignals,
+        active_signals: activeSignals.length,
+        closed_signals: closedSignals,
+        win_rate: winRateStats.winRate,
+        total_pnl_percent: winRateStats.totalPnL || 0,
+        avg_pnl_percent: winRateStats.avgPnL
+      },
+      active: {
+        total: activeSignals.length,
+        by_direction: activeByDirection,
+        by_type: activeByType,
+        by_rating: activeByRating
+      },
+      history: {
+        total: closedSignals,
+        win: winRateStats.win,
+        loss: winRateStats.loss,
+        breakeven: winRateStats.breakeven,
+        by_rating: winRateStats.byRating,
+        recent_trades: winRateStats.recentTrades || []
+      },
+      time_based: {
+        today: {
+          total: todayStats.total,
+          win: todayStats.win,
+          loss: todayStats.loss,
+          win_rate: todayStats.winRate
+        },
+        this_week: {
+          total: weekStats.total,
+          win: weekStats.win,
+          loss: weekStats.loss,
+          win_rate: weekStats.winRate
+        },
+        this_month: {
+          total: monthStats.total,
+          win: monthStats.win,
+          loss: monthStats.loss,
+          win_rate: monthStats.winRate
+        }
+      },
+      by_symbol: bySymbol,
+      timestamp: Date.now()
+    });
   } catch (error) {
     console.error('Error getting stats:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * 获取历史信号记录
+ */
+app.get('/api/history', (req, res) => {
+  try {
+    const { limit = '50', offset = '0', result = 'all' } = req.query;
+
+    const history = getHistory();
+    let records = history.records || [];
+
+    // 按结果过滤
+    if (result !== 'all') {
+      records = records.filter(r => r.result === result);
+    }
+
+    // 按时间倒序
+    records = records.sort((a, b) => (b.closed_at || b.created_at) - (a.closed_at || a.created_at));
+
+    // 分页
+    const offsetNum = parseInt(offset);
+    const limitNum = parseInt(limit);
+    const paginatedRecords = records.slice(offsetNum, offsetNum + limitNum);
+
+    res.json({
+      success: true,
+      total: records.length,
+      offset: offsetNum,
+      limit: limitNum,
+      records: paginatedRecords
+    });
+  } catch (error) {
+    console.error('Error getting history:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
@@ -367,6 +532,50 @@ app.post('/api/signals/close', (req, res) => {
 });
 
 /**
+ * 标记信号为已入场
+ */
+app.post('/api/signals/enter', (req, res) => {
+  try {
+    const { signalId, entryPrice } = req.body;
+
+    if (!signalId || !entryPrice) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing signalId or entryPrice'
+      });
+    }
+
+    const result = markEntered(signalId, entryPrice);
+
+    if (result) {
+      // 广播信号入场
+      broadcastSignalUpdate({
+        type: 'signal_entered',
+        data: { signalId, entryPrice }
+      });
+
+      res.json({
+        success: true,
+        message: `Signal ${signalId} marked as entered`,
+        signalId,
+        entryPrice
+      });
+    } else {
+      res.status(404).json({ 
+        success: false, 
+        error: 'Signal not found' 
+      });
+    }
+  } catch (error) {
+    console.error('Enter signal error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
  * 健康检查
  */
 app.get('/health', (req, res) => {
@@ -409,12 +618,6 @@ const server = app.listen(PORT, () => {
   // 启动时执行一次扫描
   setTimeout(() => {
     console.log('执行启动扫描...');
-    // 模拟触发扫描
-    const mockReq = {};
-    const mockRes = {
-      json: (data) => console.log('Initial scan triggered:', data.message)
-    };
-    // 不能直接调用，需要手动执行扫描逻辑
     performInitialScan();
   }, 3000);
 });
@@ -440,6 +643,11 @@ async function performInitialScan() {
       mtf_analysis: { structure: 'uptrend', fvg_count: 3 },
       ltf_signals: mockSignals
     };
+
+    // 将信号添加到生命周期管理
+    for (const signal of mockSignals) {
+      addSignal(signal);
+    }
 
     scanStatus = {
       status: 'IDLE',
