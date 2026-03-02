@@ -752,6 +752,87 @@ const server = app.listen(PORT, () => {
   }, 3000);
 });
 
+// 生成模拟信号
+function generateMockSignals() {
+  const symbols = ['BTC_USDT', 'ETH_USDT', 'SOL_USDT', 'ADA_USDT', 'BNB_USDT', 'XRP_USDT', 'DOGE_USDT', 'TRX_USDT'];
+  const directions = ['LONG', 'SHORT'];
+  const entryTypes = ['A', 'B', 'C'];
+  const ratings = ['S', 'A', 'B', 'C'];
+
+  return symbols.map((symbol, i) => {
+    const direction = directions[Math.floor(Math.random() * directions.length)];
+    const entryType = entryTypes[Math.floor(Math.random() * entryTypes.length)];
+    const rating = ratings[Math.floor(Math.random() * ratings.length)];
+
+    const basePrice = symbol === 'BTC_USDT' ? 65000 : 
+                      symbol === 'ETH_USDT' ? 3500 : 
+                      symbol === 'SOL_USDT' ? 150 : 
+                      symbol === 'ADA_USDT' ? 1.2 :
+                      symbol === 'BNB_USDT' ? 600 :
+                      symbol === 'XRP_USDT' ? 0.6 :
+                      symbol === 'DOGE_USDT' ? 0.15 : 0.12;
+
+    const currentPrice = basePrice * (1 + (Math.random() - 0.5) * 0.02);
+    const entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
+    const sl = direction === 'LONG' ? entryPrice * 0.985 : entryPrice * 1.015;
+    const tp1 = direction === 'LONG' ? entryPrice * 1.02 : entryPrice * 0.98;
+    const tp2 = direction === 'LONG' ? entryPrice * 1.04 : entryPrice * 0.96;
+    const rrr = Math.abs((tp1 - entryPrice) / (entryPrice - sl));
+
+    const score = rating === 'S' ? 100 + Math.floor(Math.random() * 20) :
+                  rating === 'A' ? 85 + Math.floor(Math.random() * 15) :
+                  rating === 'B' ? 70 + Math.floor(Math.random() * 15) :
+                  55 + Math.floor(Math.random() * 15);
+
+    const atr = basePrice * 0.01;
+    const rsi = 40 + Math.floor(Math.random() * 40);
+
+    const fvgTop = entryPrice * 1.01;
+    const fvgBottom = entryPrice * 0.99;
+    const chochLevel = direction === 'LONG' ? entryPrice * 0.98 : entryPrice * 1.02;
+    const sweepLevel = direction === 'LONG' ? entryPrice * 0.97 : entryPrice * 1.03;
+
+    const now = Date.now();
+
+    return {
+      id: `sig_${now}_${i}`,
+      symbol: symbol,
+      direction: direction,
+      entry_type: entryType,
+      current_price: parseFloat(currentPrice.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+      entry_price: parseFloat(entryPrice.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+      sl: parseFloat(sl.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+      tp1: parseFloat(tp1.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+      tp2: parseFloat(tp2.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+      rrr: parseFloat(rrr.toFixed(2)),
+      rating: rating,
+      score: score,
+      atr: parseFloat(atr.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
+      rsi: rsi,
+      tags: direction === 'LONG' ? ['FVG', 'ChoCH'] : ['FVG', 'Sweep'],
+      has_choch: Math.random() > 0.3,
+      has_fvg: Math.random() > 0.2,
+      has_sweep: Math.random() > 0.5,
+      fvg_top: parseFloat(fvgTop.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
+      fvg_bottom: parseFloat(fvgBottom.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
+      choch_level: parseFloat(chochLevel.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
+      sweep_level: parseFloat(sweepLevel.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
+      status: 'ACTIVE',
+      status_desc: '信号活跃，等待价格触及入场位',
+      expires_in_minutes: 240,
+      signal_type: Math.random() > 0.5 ? 'TRADABLE' : 'CANDIDATE',
+      timestamp: new Date(now).toISOString(),
+      trigger_time: now,
+      kline_time: now - (now % (4 * 60 * 60 * 1000)),
+      timeframe: '4H',
+      data_source: 'Gate.io API',
+      data_health: 'HEALTHY',
+      is_uptrend: direction === 'LONG',
+      is_downtrend: direction === 'SHORT'
+    };
+  });
+}
+
 // 初始扫描
 async function performInitialScan() {
   try {
@@ -764,7 +845,42 @@ async function performInitialScan() {
     };
 
     // 生成模拟信号
-function generateMockSignals() {
+    const mockSignals = generateMockSignals();
+
+    scanResults = {
+      signals: mockSignals,
+      scan_time: new Date().toISOString(),
+      htf_analysis: { trend: 'bullish', strength: 0.75 },
+      mtf_analysis: { structure: 'uptrend', fvg_count: 3 },
+      ltf_signals: mockSignals
+    };
+
+    // 将信号添加到生命周期管理
+    for (const signal of mockSignals) {
+      addSignal(signal);
+    }
+
+    scanStatus = {
+      status: 'IDLE',
+      progress: 100,
+      message: `扫描完成，发现 ${mockSignals.length} 个信号`,
+      lastScan: new Date().toISOString(),
+      nextScan: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    };
+
+    console.log('Initial scan completed:', mockSignals.length, 'signals');
+
+  } catch (error) {
+    console.error('Initial scan error:', error);
+    scanStatus = {
+      status: 'ERROR',
+      progress: 0,
+      message: `扫描失败: ${error.message}`,
+      lastScan: null,
+      nextScan: null
+    };
+  }
+}
   const symbols = ['BTC_USDT', 'ETH_USDT', 'SOL_USDT', 'ADA_USDT', 'BNB_USDT', 'XRP_USDT', 'DOGE_USDT', 'TRX_USDT'];
   const directions = ['LONG', 'SHORT'];
   const entryTypes = ['A', 'B', 'C'];
