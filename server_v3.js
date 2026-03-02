@@ -297,6 +297,38 @@ app.get('/api/stats', (req, res) => {
 /**
  * 获取历史信号记录
  */
+
+/**
+ * 获取胜率统计（兼容前端格式）
+ */
+app.get('/api/winrate', (req, res) => {
+  try {
+    const { period = '24h' } = req.query;
+
+    // 获取胜率统计
+    const winRateStats = getWinRateStats(period);
+
+    // 转换为前端期望的格式
+    const formattedStats = {
+      period: winRateStats.period,
+      overall: {
+        total: winRateStats.total,
+        win: winRateStats.win,
+        loss: winRateStats.loss,
+        winRate: winRateStats.winRate
+      },
+      byRating: winRateStats.byRating
+    };
+
+    res.json(formattedStats);
+  } catch (error) {
+    console.error('Error getting winrate:', error);
+    res.status(500).json({ 
+      error: error.message 
+    });
+  }
+});
+
 app.get('/api/history', (req, res) => {
   try {
     const { limit = '50', offset = '0', result = 'all' } = req.query;
