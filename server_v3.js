@@ -329,6 +329,104 @@ app.get('/api/winrate', (req, res) => {
   }
 });
 
+
+/**
+ * 获取K线数据
+ */
+app.get('/api/klines', (req, res) => {
+  try {
+    const { symbol = 'BTCUSDT', timeframe = '4h', limit = '100' } = req.query;
+
+    // 生成模拟K线数据
+    const klines = [];
+    const now = Date.now();
+    const intervalMs = {
+      '1m': 60 * 1000,
+      '5m': 5 * 60 * 1000,
+      '15m': 15 * 60 * 1000,
+      '30m': 30 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+      '4h': 4 * 60 * 60 * 1000,
+      '1d': 24 * 60 * 60 * 1000
+    }[timeframe] || 4 * 60 * 60 * 1000;
+
+    const limitNum = parseInt(limit);
+    let basePrice = symbol === 'BTCUSDT' ? 65000 : 
+                    symbol === 'ETHUSDT' ? 3500 : 
+                    symbol === 'SOLUSDT' ? 150 : 1.2;
+
+    for (let i = limitNum; i >= 0; i--) {
+      const time = now - i * intervalMs;
+      const open = basePrice * (1 + (Math.random() - 0.5) * 0.02);
+      const close = open * (1 + (Math.random() - 0.5) * 0.01);
+      const high = Math.max(open, close) * (1 + Math.random() * 0.005);
+      const low = Math.min(open, close) * (1 - Math.random() * 0.005);
+      const volume = Math.random() * 1000000;
+
+      klines.push({
+        time: Math.floor(time / 1000),
+        open: parseFloat(open.toFixed(2)),
+        high: parseFloat(high.toFixed(2)),
+        low: parseFloat(low.toFixed(2)),
+        close: parseFloat(close.toFixed(2)),
+        volume: parseFloat(volume.toFixed(2))
+      });
+
+      basePrice = close;
+    }
+
+    res.json({
+      success: true,
+      symbol,
+      timeframe,
+      count: klines.length,
+      klines
+    });
+  } catch (error) {
+    console.error('Error getting klines:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * 获取扫描日志
+ */
+app.get('/api/scan/logs', (req, res) => {
+  try {
+    const { limit = '50' } = req.query;
+
+    // 返回模拟日志
+    const logs = [
+      {
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        message: '扫描完成',
+        details: { signals_found: 4 }
+      },
+      {
+        timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        level: 'INFO',
+        message: '开始扫描',
+        details: { symbols: 54 }
+      }
+    ];
+
+    res.json({
+      success: true,
+      logs: logs.slice(0, parseInt(limit))
+    });
+  } catch (error) {
+    console.error('Error getting logs:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 app.get('/api/history', (req, res) => {
   try {
     const { limit = '50', offset = '0', result = 'all' } = req.query;
