@@ -263,6 +263,7 @@ function getWinRateStats(period = 'all') {
     loss: losses,
     breakeven,
     winRate,
+    totalPnL,
     avgPnL,
     byRating,
     recentTrades: filteredRecords.slice(-10).reverse()
