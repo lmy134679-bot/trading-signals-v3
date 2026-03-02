@@ -335,11 +335,9 @@ app.get('/api/winrate', (req, res) => {
  */
 app.get('/api/klines', (req, res) => {
   try {
-    const { symbol = 'BTCUSDT', timeframe = '4h', limit = '100' } = req.query;
+    const { symbols = 'BTC_USDT,ETH_USDT,SOL_USDT,ADA_USDT,BNB_USDT,XRP_USDT,DOGE_USDT,TRX_USDT', timeframe = '4h', limit = '100' } = req.query;
 
-    // 生成模拟K线数据
-    const klines = [];
-    const now = Date.now();
+    const symbolList = symbols.split(',');
     const intervalMs = {
       '1m': 60 * 1000,
       '5m': 5 * 60 * 1000,
@@ -351,36 +349,48 @@ app.get('/api/klines', (req, res) => {
     }[timeframe] || 4 * 60 * 60 * 1000;
 
     const limitNum = parseInt(limit);
-    let basePrice = symbol === 'BTCUSDT' ? 65000 : 
-                    symbol === 'ETHUSDT' ? 3500 : 
-                    symbol === 'SOLUSDT' ? 150 : 1.2;
+    const result = {};
 
-    for (let i = limitNum; i >= 0; i--) {
-      const time = now - i * intervalMs;
-      const open = basePrice * (1 + (Math.random() - 0.5) * 0.02);
-      const close = open * (1 + (Math.random() - 0.5) * 0.01);
-      const high = Math.max(open, close) * (1 + Math.random() * 0.005);
-      const low = Math.min(open, close) * (1 - Math.random() * 0.005);
-      const volume = Math.random() * 1000000;
+    for (const symbol of symbolList) {
+      const klines = [];
+      const now = Date.now();
 
-      klines.push({
-        time: Math.floor(time / 1000),
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume: parseFloat(volume.toFixed(2))
-      });
+      let basePrice = symbol === 'BTC_USDT' ? 65000 : 
+                      symbol === 'ETH_USDT' ? 3500 : 
+                      symbol === 'SOL_USDT' ? 150 : 
+                      symbol === 'ADA_USDT' ? 1.2 :
+                      symbol === 'BNB_USDT' ? 600 :
+                      symbol === 'XRP_USDT' ? 0.6 :
+                      symbol === 'DOGE_USDT' ? 0.15 : 0.12;
 
-      basePrice = close;
+      for (let i = limitNum; i >= 0; i--) {
+        const time = now - i * intervalMs;
+        const open = basePrice * (1 + (Math.random() - 0.5) * 0.02);
+        const close = open * (1 + (Math.random() - 0.5) * 0.01);
+        const high = Math.max(open, close) * (1 + Math.random() * 0.005);
+        const low = Math.min(open, close) * (1 - Math.random() * 0.005);
+        const volume = Math.random() * 1000000;
+
+        klines.push({
+          timestamp: time,
+          open: parseFloat(open.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+          high: parseFloat(high.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+          low: parseFloat(low.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+          close: parseFloat(close.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
+          volume: parseFloat(volume.toFixed(2))
+        });
+
+        basePrice = close;
+      }
+
+      result[symbol] = klines;
     }
 
     res.json({
       success: true,
-      symbol,
       timeframe,
-      count: klines.length,
-      klines
+      count: symbolList.length,
+      klines: result
     });
   } catch (error) {
     console.error('Error getting klines:', error);
@@ -391,9 +401,6 @@ app.get('/api/klines', (req, res) => {
   }
 });
 
-/**
- * 获取扫描日志
- */
 app.get('/api/scan/logs', (req, res) => {
   try {
     const { limit = '50' } = req.query;
@@ -772,16 +779,42 @@ function generateMockSignals() {
                       symbol === 'XRP_USDT' ? 0.6 :
                       symbol === 'DOGE_USDT' ? 0.15 : 0.12;
 
+    // 生成更真实的价格数据
     const currentPrice = basePrice * (1 + (Math.random() - 0.5) * 0.02);
-    const entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
-    const sl = direction === 'LONG' ? entryPrice * 0.985 : entryPrice * 1.015;
-    const tp1 = direction === 'LONG' ? entryPrice * 1.02 : entryPrice * 0.98;
-    const tp2 = direction === 'LONG' ? entryPrice * 1.04 : entryPrice * 0.96;
-    const rrr = Math.abs((tp1 - entryPrice) / (entryPrice - sl));
 
-    const score = rating === 'S' ? 100 + Math.floor(Math.random() * 20) :
-                  rating === 'A' ? 85 + Math.floor(Math.random() * 15) :
-                  rating === 'B' ? 70 + Math.floor(Math.random() * 15) :
+    // 根据方向计算入场价、止损和止盈
+    let entryPrice, sl, tp1, tp2, rrr;
+
+    if (direction === 'LONG') {
+      // 做多：入场价在当前价附近，止损在下方，止盈在上方
+      entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
+      sl = entryPrice * (0.97 + Math.random() * 0.02);  // 止损在入场价下方1-3%
+      tp1 = entryPrice * (1.02 + Math.random() * 0.02); // TP1在入场价上方2-4%
+      tp2 = entryPrice * (1.04 + Math.random() * 0.04); // TP2在入场价上方4-8%
+    } else {
+      // 做空：入场价在当前价附近，止损在上方，止盈在下方
+      entryPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.005);
+      sl = entryPrice * (1.01 + Math.random() * 0.02);  // 止损在入场价上方1-3%
+      tp1 = entryPrice * (0.98 - Math.random() * 0.02); // TP1在入场价下方2-4%
+      tp2 = entryPrice * (0.96 - Math.random() * 0.04); // TP2在入场价下方4-8%
+    }
+
+    // 正确计算RRR (Risk Reward Ratio)
+    const risk = Math.abs(entryPrice - sl);
+    const reward1 = Math.abs(tp1 - entryPrice);
+    const reward2 = Math.abs(tp2 - entryPrice);
+    rrr = risk > 0 ? parseFloat((reward1 / risk).toFixed(2)) : 1;
+
+    // 根据RRR调整评级
+    let adjustedRating = rating;
+    if (rrr >= 3) adjustedRating = 'S';
+    else if (rrr >= 2.5) adjustedRating = 'A';
+    else if (rrr >= 2) adjustedRating = 'B';
+    else adjustedRating = 'C';
+
+    const score = adjustedRating === 'S' ? 100 + Math.floor(Math.random() * 20) :
+                  adjustedRating === 'A' ? 85 + Math.floor(Math.random() * 15) :
+                  adjustedRating === 'B' ? 70 + Math.floor(Math.random() * 15) :
                   55 + Math.floor(Math.random() * 15);
 
     const atr = basePrice * 0.01;
@@ -791,6 +824,19 @@ function generateMockSignals() {
     const fvgBottom = entryPrice * 0.99;
     const chochLevel = direction === 'LONG' ? entryPrice * 0.98 : entryPrice * 1.02;
     const sweepLevel = direction === 'LONG' ? entryPrice * 0.97 : entryPrice * 1.03;
+
+    // 生成入场原因描述
+    const entryReasons = {
+      'A': direction === 'LONG' 
+        ? 'FVG下沿挂单入场，等待价格回调至公允价值缺口下沿' 
+        : 'FVG上沿挂单入场，等待价格反弹至公允价值缺口上沿',
+      'B': direction === 'LONG'
+        ? '突破ChoCH后市价追多，确认趋势反转'
+        : '跌破ChoCH后市价追空，确认趋势反转',
+      'C': direction === 'LONG'
+        ? '订单块支撑位挂单，等待价格测试关键支撑'
+        : '订单块阻力位挂单，等待价格测试关键阻力'
+    };
 
     const now = Date.now();
 
@@ -804,8 +850,8 @@ function generateMockSignals() {
       sl: parseFloat(sl.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
       tp1: parseFloat(tp1.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
       tp2: parseFloat(tp2.toFixed(symbol === 'BTC_USDT' ? 2 : symbol === 'ETH_USDT' ? 2 : 6)),
-      rrr: parseFloat(rrr.toFixed(2)),
-      rating: rating,
+      rrr: rrr,
+      rating: adjustedRating,
       score: score,
       atr: parseFloat(atr.toFixed(symbol === 'BTC_USDT' ? 2 : 6)),
       rsi: rsi,
@@ -821,6 +867,7 @@ function generateMockSignals() {
       status_desc: '信号活跃，等待价格触及入场位',
       expires_in_minutes: 240,
       signal_type: Math.random() > 0.5 ? 'TRADABLE' : 'CANDIDATE',
+      entry_description: entryReasons[entryType],
       timestamp: new Date(now).toISOString(),
       trigger_time: now,
       kline_time: now - (now % (4 * 60 * 60 * 1000)),
